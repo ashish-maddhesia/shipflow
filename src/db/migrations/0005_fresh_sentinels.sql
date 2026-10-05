@@ -1,0 +1,1 @@
+ALTER TABLE "project_members" ADD COLUMN "role" "role" DEFAULT 'VIEWER' NOT NULL;

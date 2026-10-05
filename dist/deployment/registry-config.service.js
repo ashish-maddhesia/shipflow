@@ -1,0 +1,44 @@
+import { eq } from "drizzle-orm";
+import { db } from "../lib/db.js";
+import { registries, organizations, } from "../db/schema.js";
+export async function createRegistry(organizationId, name, type, registryUrl, username, password) {
+    const [organization] = await db
+        .select({
+        id: organizations.id,
+    })
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .limit(1);
+    if (!organization) {
+        throw new Error("Organization not found");
+    }
+    const [registry] = await db
+        .insert(registries)
+        .values({
+        id: crypto.randomUUID(),
+        organizationId,
+        name,
+        type,
+        registryUrl,
+        username,
+        password,
+    })
+        .returning({
+        id: registries.id,
+        organizationId: registries.organizationId,
+        name: registries.name,
+        type: registries.type,
+        registryUrl: registries.registryUrl,
+        username: registries.username,
+        createdAt: registries.createdAt,
+    });
+    return registry;
+}
+export async function getOrganizationRegistry(organizationId) {
+    const [registry] = await db
+        .select()
+        .from(registries)
+        .where(eq(registries.organizationId, organizationId))
+        .limit(1);
+    return registry ?? null;
+}
