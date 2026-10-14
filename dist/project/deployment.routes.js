@@ -10,12 +10,20 @@ const router = Router();
 router.post("/services/:serviceId/deployments", requireAuth, requireServiceProjectRole("ADMIN", "MANAGER", "DEVOPS_ENGINEER"), async (req, res) => {
     try {
         const serviceEnvironmentId = req.body.serviceEnvironmentId;
-        if (!serviceEnvironmentId) {
+        const serverId = req.body.serverId;
+        if (typeof serviceEnvironmentId !== "string" ||
+            !serviceEnvironmentId.trim()) {
             return res.status(400).json({
                 message: "serviceEnvironmentId is required",
             });
         }
-        const deployment = await createDeployment(serviceEnvironmentId);
+        if (typeof serverId !== "string" ||
+            !serverId.trim()) {
+            return res.status(400).json({
+                message: "serverId is required",
+            });
+        }
+        const deployment = await createDeployment(serviceEnvironmentId, serverId);
         return res.status(201).json({
             message: "Deployment created successfully",
             deployment,

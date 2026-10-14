@@ -1,0 +1,2 @@
+ALTER TABLE "deployments" ADD COLUMN "server_id" text;--> statement-breakpoint
+ALTER TABLE "deployments" ADD CONSTRAINT "deployments_server_id_servers_id_fk" FOREIGN KEY ("server_id") REFERENCES "public"."servers"("id") ON DELETE no action ON UPDATE no action;

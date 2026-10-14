@@ -10,14 +10,20 @@ import environmentRoutes from "./environment/environment.routes.js";
 import serviceRoutes from "./project/service.routes.js";
 import deploymentRoutes from "./project/deployment.routes.js";
 import serviceEnvironmentRoutes from "./project/service-environment.routes.js";
+import registryRoutes from "./deployment/registry.routes.js";
+import serverRoutes from "./server/server.routes.js";
 const app = express();
 app.use(cors({
     origin: "http://localhost:3000",
     credentials: true,
 }));
+app.use("/api", serviceEnvironmentRoutes);
+app.use("/api", registryRoutes);
 // Middleware MUST come before routes
 app.use(express.json());
 app.use(cookieParser());
+// Server management
+app.use("/api/servers", serverRoutes);
 // Health check
 app.get("/health", (_req, res) => {
     res.json({

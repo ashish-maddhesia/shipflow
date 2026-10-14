@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   unique,
+  integer,
 } from "drizzle-orm/pg-core";
 
 /*
@@ -12,6 +13,9 @@ import {
  * =========================================================
  */
 
+/*
+ * User / organization / project roles
+ */
 export const roleEnum = pgEnum("role", [
   "ADMIN",
   "DEVELOPER",
@@ -20,6 +24,15 @@ export const roleEnum = pgEnum("role", [
   "VIEWER",
 ]);
 
+
+export const serverConnectionStatusEnum = pgEnum(
+  "server_connection_status",
+  ["PENDING", "READY", "ERROR"]
+);
+
+/*
+ * Environment types
+ */
 export const environmentTypeEnum = pgEnum(
   "environment_type",
   [
@@ -29,6 +42,9 @@ export const environmentTypeEnum = pgEnum(
   ]
 );
 
+/*
+ * Deployment lifecycle
+ */
 export const deploymentStatusEnum = pgEnum(
   "deployment_status",
   [
@@ -41,6 +57,9 @@ export const deploymentStatusEnum = pgEnum(
   ]
 );
 
+/*
+ * Container registry providers
+ */
 export const registryTypeEnum = pgEnum(
   "registry_type",
   [
@@ -162,13 +181,14 @@ export const organizationMembers = pgTable(
  * REGISTRIES
  * =========================================================
  *
- * Container registry configuration for an organization.
+ * Each organization can configure one or more
+ * container registries.
  *
- * Supported:
+ * Examples:
  *
  * Docker Hub
  * GHCR
- * ECR
+ * AWS ECR
  *
  */
 
@@ -196,10 +216,10 @@ export const registries = pgTable(
       .notNull(),
 
     /*
-     * Temporary development implementation.
+     * Development implementation.
      *
-     * Later replace this with encrypted
-     * credentials / secret references.
+     * Later we should replace this with
+     * encrypted credentials / secret references.
      */
     password: text("password")
       .notNull(),
@@ -369,6 +389,15 @@ export const services = pgTable(
  * =========================================================
  * SERVICE ENVIRONMENTS
  * =========================================================
+ *
+ * Connects a service to an environment.
+ *
+ * Example:
+ *
+ * Service
+ *    ↓
+ * Development
+ *
  */
 
 export const serviceEnvironments = pgTable(
@@ -406,6 +435,18 @@ export const serviceEnvironments = pgTable(
  * =========================================================
  * DEPLOYMENTS
  * =========================================================
+ *
+ * A deployment belongs to a specific
+ * service environment.
+ *
+ * Example:
+ *
+ * Service
+ *    ↓
+ * Environment
+ *    ↓
+ * Deployment
+ *
  */
 
 export const deployments = pgTable(
@@ -422,9 +463,10 @@ export const deployments = pgTable(
         () => serviceEnvironments.id
       ),
 
-    status: deploymentStatusEnum(
-      "status"
-    )
+    serverId: text("server_id")
+      .references(() => servers.id),
+
+    status: deploymentStatusEnum("status")
       .notNull()
       .default("PENDING"),
 
@@ -437,3 +479,67 @@ export const deployments = pgTable(
       .notNull(),
   }
 );
+
+
+/*
+ * =========================================================
+ * DEPLOYMENT SERVERS
+ * =========================================================
+ */
+
+export const servers = pgTable("servers", {
+  id: text("id")
+    .primaryKey(),
+
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+
+  name: text("name")
+    .notNull(),
+
+  host: text("host")
+    .notNull(),
+
+  port: integer("port")
+    .notNull()
+    .default(22),
+
+  username: text("username")
+    .notNull(),
+
+  // AES-256-GCM encrypted SSH private key.
+  // Never return this field in API responses.
+  encryptedPrivateKey: text("encrypted_private_key")
+    .notNull(),
+
+  // Optional encrypted SSH key passphrase.
+  encryptedPassphrase: text("encrypted_passphrase"),
+
+  // Fingerprint of the trusted SSH host key.
+  // Must be verified before connecting.
+  hostKeyFingerprint: text("host_key_fingerprint"),
+
+  status: serverConnectionStatusEnum("status")
+    .notNull()
+    .default("PENDING"),
+
+  lastConnectedAt: timestamp("last_connected_at"),
+
+  lastError: text("last_error"),
+
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id),
+
+  createdAt: timestamp("created_at")
+    .defaultNow()
+    .notNull(),
+
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .notNull(),
+});
+
+
+

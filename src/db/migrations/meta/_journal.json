@@ -92,6 +92,20 @@
       "when": 1791182571933,
       "tag": "0012_supreme_stardust",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791596325237,
+      "tag": "0013_glossy_makkari",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791885391178,
+      "tag": "0014_skinny_groot",
+      "breakpoints": true
     }
   ]
 }

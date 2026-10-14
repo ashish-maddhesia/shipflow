@@ -37,18 +37,30 @@ router.post(
     try {
       const serviceEnvironmentId =
         req.body.serviceEnvironmentId;
+      const serverId = req.body.serverId;
 
-      if (!serviceEnvironmentId) {
+      if (
+        typeof serviceEnvironmentId !== "string" ||
+        !serviceEnvironmentId.trim()
+      ) {
         return res.status(400).json({
-          message:
-            "serviceEnvironmentId is required",
+          message: "serviceEnvironmentId is required",
         });
       }
 
-      const deployment =
-        await createDeployment(
-          serviceEnvironmentId
-        );
+      if (
+        typeof serverId !== "string" ||
+        !serverId.trim()
+      ) {
+        return res.status(400).json({
+          message: "serverId is required",
+        });
+      }
+
+      const deployment = await createDeployment(
+        serviceEnvironmentId,
+        serverId
+      );
 
       return res.status(201).json({
         message:

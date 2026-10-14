@@ -10,7 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-     "worker": "tsx watch src/worker.ts"
+    "worker": "tsx watch src/worker.ts"
   },
   "keywords": [],
   "author": "",
@@ -18,7 +18,7 @@
   "type": "module",
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "bullmq": "^6.3.8",
+    "bullmq": "^6.3.11",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^18.0.2",
@@ -27,6 +27,7 @@
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0",
+    "ssh2": "^1.17.0",
     "ws": "^8.21.3",
     "zod": "^4.6.5"
   },
@@ -38,6 +39,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.2",
     "@types/pg": "^8.23.1",
+    "@types/ssh2": "^1.15.6",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

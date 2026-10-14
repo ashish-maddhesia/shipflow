@@ -21,9 +21,12 @@ export interface ProjectInfo {
   packageManager: PackageManager;
   monorepo: boolean;
   hasDockerfile: boolean;
+  entrypoint?: string;
 }
 
-async function exists(filePath: string): Promise<boolean> {
+async function exists(
+  filePath: string
+): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
@@ -32,72 +35,230 @@ async function exists(filePath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Find Go applications by locating main.go files.
+ *
+ * Example:
+ *
+ * repository/
+ * ├── go.mod
+ * └── main.go
+ *
+ * returns:
+ * [ "." ]
+ *
+ * Whereas:
+ *
+ * repository/
+ * ├── go.mod
+ * ├── api/main.go
+ * └── worker/main.go
+ *
+ * returns:
+ * [ "api", "worker" ]
+ */
+async function findGoEntrypoints(
+  repositoryPath: string
+): Promise<string[]> {
+  const results: string[] = [];
+
+  async function walk(
+    currentPath: string
+  ): Promise<void> {
+    const entries = await fs.readdir(
+      currentPath,
+      {
+        withFileTypes: true,
+      }
+    );
+
+    for (const entry of entries) {
+      // Ignore directories that should never
+      // be considered application source.
+      if (
+        entry.name === ".git" ||
+        entry.name === "vendor" ||
+        entry.name === "node_modules"
+      ) {
+        continue;
+      }
+
+      const fullPath = path.join(
+        currentPath,
+        entry.name
+      );
+
+      if (entry.isDirectory()) {
+        await walk(fullPath);
+        continue;
+      }
+
+      // We only care about Go application entrypoints.
+      if (entry.name !== "main.go") {
+        continue;
+      }
+
+      const relativeDir = path.relative(
+        repositoryPath,
+        path.dirname(fullPath)
+      );
+
+      results.push(
+        relativeDir === ""
+          ? "."
+          : relativeDir
+      );
+    }
+  }
+
+  await walk(repositoryPath);
+
+  return results;
+}
+
 export async function detectProject(
   repositoryPath: string
 ): Promise<ProjectInfo> {
-  console.log(`🔍 Detecting project: ${repositoryPath}`);
-
-  const hasDockerfile = await exists(
-    path.join(repositoryPath, "Dockerfile")
+  console.log(
+    `🔍 Detecting project: ${repositoryPath}`
   );
 
-  // -------------------------
-  // Node.js
-  // -------------------------
+  const hasDockerfile = await exists(
+    path.join(
+      repositoryPath,
+      "Dockerfile"
+    )
+  );
+
+  // =========================================================
+  // Node.js / Next.js
+  // =========================================================
 
   const packageJsonPath = path.join(
     repositoryPath,
     "package.json"
   );
 
-  if (await exists(packageJsonPath)) {
+  if (
+    await exists(packageJsonPath)
+  ) {
     const packageJson = JSON.parse(
-      await fs.readFile(packageJsonPath, "utf-8")
+      await fs.readFile(
+        packageJsonPath,
+        "utf-8"
+      )
     );
 
-    let packageManager: PackageManager = null;
+    let packageManager: PackageManager =
+      null;
 
-    if (await exists(path.join(repositoryPath, "pnpm-lock.yaml"))) {
+    // -------------------------
+    // Package manager detection
+    // -------------------------
+
+    if (
+      await exists(
+        path.join(
+          repositoryPath,
+          "pnpm-lock.yaml"
+        )
+      )
+    ) {
       packageManager = "pnpm";
     } else if (
-      await exists(path.join(repositoryPath, "yarn.lock"))
+      await exists(
+        path.join(
+          repositoryPath,
+          "yarn.lock"
+        )
+      )
     ) {
       packageManager = "yarn";
     } else if (
-      await exists(path.join(repositoryPath, "bun.lockb")) ||
-      await exists(path.join(repositoryPath, "bun.lock"))
+      await exists(
+        path.join(
+          repositoryPath,
+          "bun.lockb"
+        )
+      ) ||
+      await exists(
+        path.join(
+          repositoryPath,
+          "bun.lock"
+        )
+      )
     ) {
       packageManager = "bun";
     } else if (
-      await exists(path.join(repositoryPath, "package-lock.json"))
+      await exists(
+        path.join(
+          repositoryPath,
+          "package-lock.json"
+        )
+      )
     ) {
       packageManager = "npm";
     }
+
+    // -------------------------
+    // Dependencies
+    // -------------------------
 
     const dependencies = {
       ...packageJson.dependencies,
       ...packageJson.devDependencies,
     };
 
-    const isNextJs = Boolean(dependencies["next"]);
+    // -------------------------
+    // Next.js detection
+    // -------------------------
+
+    const isNextJs =
+      Boolean(
+        dependencies["next"]
+      );
+
+    // -------------------------
+    // Monorepo detection
+    // -------------------------
 
     const monorepo =
       (await exists(
-        path.join(repositoryPath, "pnpm-workspace.yaml")
+        path.join(
+          repositoryPath,
+          "pnpm-workspace.yaml"
+        )
       )) ||
       (await exists(
-        path.join(repositoryPath, "turbo.json")
+        path.join(
+          repositoryPath,
+          "turbo.json"
+        )
       )) ||
-      Array.isArray(packageJson.workspaces);
+      Array.isArray(
+        packageJson.workspaces
+      );
 
-    const projectType: ProjectType = isNextJs
-      ? "nextjs"
-      : "node";
+    const projectType: ProjectType =
+      isNextJs
+        ? "nextjs"
+        : "node";
 
-    console.log(`📦 Project type: ${projectType}`);
-    console.log(`📦 Package manager: ${packageManager}`);
-    console.log(`📦 Monorepo: ${monorepo}`);
-    console.log(`🐳 Dockerfile: ${hasDockerfile}`);
+    console.log(
+      `📦 Project type: ${projectType}`
+    );
+
+    console.log(
+      `📦 Package manager: ${packageManager}`
+    );
+
+    console.log(
+      `📦 Monorepo: ${monorepo}`
+    );
+
+    console.log(
+      `🐳 Dockerfile: ${hasDockerfile}`
+    );
 
     return {
       type: projectType,
@@ -107,14 +268,86 @@ export async function detectProject(
     };
   }
 
-  // -------------------------
+  // =========================================================
   // Go
-  // -------------------------
+  // =========================================================
 
   if (
-    await exists(path.join(repositoryPath, "go.mod"))
+    await exists(
+      path.join(
+        repositoryPath,
+        "go.mod"
+      )
+    )
   ) {
-    console.log("🐹 Go project detected");
+    console.log(
+      "🐹 Go project detected"
+    );
+
+    const entrypoints =
+      await findGoEntrypoints(
+        repositoryPath
+      );
+
+    console.log(
+      `🐹 Go entrypoints found: ${entrypoints.length}`
+    );
+
+    // -------------------------
+    // Single Go application
+    // -------------------------
+
+    if (
+      entrypoints.length === 1
+    ) {
+      const entrypoint =
+        entrypoints[0];
+
+      console.log(
+        `🎯 Go entrypoint: ${entrypoint}`
+      );
+
+      return {
+        type: "go",
+        packageManager: null,
+        monorepo: false,
+        hasDockerfile,
+        entrypoint,
+      };
+    }
+
+    // -------------------------
+    // Multiple Go applications
+    // -------------------------
+
+    if (
+      entrypoints.length > 1
+    ) {
+      console.log(
+        "⚠️ Multiple Go applications detected"
+      );
+
+      console.log(
+        `📁 Candidates: ${entrypoints.join(
+          ", "
+        )}`
+      );
+
+      return {
+        type: "go",
+        packageManager: null,
+        monorepo: true,
+        hasDockerfile,
+      };
+    }
+
+    // -------------------------
+    // Go project without main.go
+    // -------------------------
+
+    console.log(
+      "⚠️ Go module found but no main.go entrypoint detected"
+    );
 
     return {
       type: "go",
@@ -124,19 +357,27 @@ export async function detectProject(
     };
   }
 
-  // -------------------------
+  // =========================================================
   // Python
-  // -------------------------
+  // =========================================================
 
   if (
     (await exists(
-      path.join(repositoryPath, "requirements.txt")
+      path.join(
+        repositoryPath,
+        "requirements.txt"
+      )
     )) ||
     (await exists(
-      path.join(repositoryPath, "pyproject.toml")
+      path.join(
+        repositoryPath,
+        "pyproject.toml"
+      )
     ))
   ) {
-    console.log("🐍 Python project detected");
+    console.log(
+      "🐍 Python project detected"
+    );
 
     return {
       type: "python",
@@ -146,14 +387,21 @@ export async function detectProject(
     };
   }
 
-  // -------------------------
+  // =========================================================
   // Rust
-  // -------------------------
+  // =========================================================
 
   if (
-    await exists(path.join(repositoryPath, "Cargo.toml"))
+    await exists(
+      path.join(
+        repositoryPath,
+        "Cargo.toml"
+      )
+    )
   ) {
-    console.log("🦀 Rust project detected");
+    console.log(
+      "🦀 Rust project detected"
+    );
 
     return {
       type: "rust",
@@ -163,7 +411,13 @@ export async function detectProject(
     };
   }
 
-  console.log("❓ Unknown project");
+  // =========================================================
+  // Unknown
+  // =========================================================
+
+  console.log(
+    "❓ Unknown project"
+  );
 
   return {
     type: "unknown",

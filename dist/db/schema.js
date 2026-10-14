@@ -1,8 +1,11 @@
-import { pgEnum, pgTable, text, timestamp, unique, } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, unique, integer, } from "drizzle-orm/pg-core";
 /*
  * =========================================================
  * ENUMS
  * =========================================================
+ */
+/*
+ * User / organization / project roles
  */
 export const roleEnum = pgEnum("role", [
     "ADMIN",
@@ -11,11 +14,18 @@ export const roleEnum = pgEnum("role", [
     "MANAGER",
     "VIEWER",
 ]);
+export const serverConnectionStatusEnum = pgEnum("server_connection_status", ["PENDING", "READY", "ERROR"]);
+/*
+ * Environment types
+ */
 export const environmentTypeEnum = pgEnum("environment_type", [
     "DEVELOPMENT",
     "STAGING",
     "PRODUCTION",
 ]);
+/*
+ * Deployment lifecycle
+ */
 export const deploymentStatusEnum = pgEnum("deployment_status", [
     "PENDING",
     "QUEUED",
@@ -24,6 +34,9 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
     "SUCCESS",
     "FAILED",
 ]);
+/*
+ * Container registry providers
+ */
 export const registryTypeEnum = pgEnum("registry_type", [
     "DOCKER_HUB",
     "GHCR",
@@ -108,13 +121,14 @@ export const organizationMembers = pgTable("organization_members", {
  * REGISTRIES
  * =========================================================
  *
- * Container registry configuration for an organization.
+ * Each organization can configure one or more
+ * container registries.
  *
- * Supported:
+ * Examples:
  *
  * Docker Hub
  * GHCR
- * ECR
+ * AWS ECR
  *
  */
 export const registries = pgTable("registries", {
@@ -133,10 +147,10 @@ export const registries = pgTable("registries", {
     username: text("username")
         .notNull(),
     /*
-     * Temporary development implementation.
+     * Development implementation.
      *
-     * Later replace this with encrypted
-     * credentials / secret references.
+     * Later we should replace this with
+     * encrypted credentials / secret references.
      */
     password: text("password")
         .notNull(),
@@ -252,6 +266,15 @@ export const services = pgTable("services", {
  * =========================================================
  * SERVICE ENVIRONMENTS
  * =========================================================
+ *
+ * Connects a service to an environment.
+ *
+ * Example:
+ *
+ * Service
+ *    ↓
+ * Development
+ *
  */
 export const serviceEnvironments = pgTable("service_environments", {
     id: text("id")
@@ -275,6 +298,18 @@ export const serviceEnvironments = pgTable("service_environments", {
  * =========================================================
  * DEPLOYMENTS
  * =========================================================
+ *
+ * A deployment belongs to a specific
+ * service environment.
+ *
+ * Example:
+ *
+ * Service
+ *    ↓
+ * Environment
+ *    ↓
+ * Deployment
+ *
  */
 export const deployments = pgTable("deployments", {
     id: text("id")
@@ -282,9 +317,55 @@ export const deployments = pgTable("deployments", {
     serviceEnvironmentId: text("service_environment_id")
         .notNull()
         .references(() => serviceEnvironments.id),
+    serverId: text("server_id")
+        .references(() => servers.id),
     status: deploymentStatusEnum("status")
         .notNull()
         .default("PENDING"),
+    createdAt: timestamp("created_at")
+        .defaultNow()
+        .notNull(),
+    updatedAt: timestamp("updated_at")
+        .defaultNow()
+        .notNull(),
+});
+/*
+ * =========================================================
+ * DEPLOYMENT SERVERS
+ * =========================================================
+ */
+export const servers = pgTable("servers", {
+    id: text("id")
+        .primaryKey(),
+    organizationId: text("organization_id")
+        .notNull()
+        .references(() => organizations.id),
+    name: text("name")
+        .notNull(),
+    host: text("host")
+        .notNull(),
+    port: integer("port")
+        .notNull()
+        .default(22),
+    username: text("username")
+        .notNull(),
+    // AES-256-GCM encrypted SSH private key.
+    // Never return this field in API responses.
+    encryptedPrivateKey: text("encrypted_private_key")
+        .notNull(),
+    // Optional encrypted SSH key passphrase.
+    encryptedPassphrase: text("encrypted_passphrase"),
+    // Fingerprint of the trusted SSH host key.
+    // Must be verified before connecting.
+    hostKeyFingerprint: text("host_key_fingerprint"),
+    status: serverConnectionStatusEnum("status")
+        .notNull()
+        .default("PENDING"),
+    lastConnectedAt: timestamp("last_connected_at"),
+    lastError: text("last_error"),
+    createdBy: text("created_by")
+        .notNull()
+        .references(() => users.id),
     createdAt: timestamp("created_at")
         .defaultNow()
         .notNull(),

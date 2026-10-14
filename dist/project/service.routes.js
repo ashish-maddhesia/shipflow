@@ -16,13 +16,13 @@ router.post("/projects/:projectId/services", requireAuth, requireProjectRole("AD
             });
         }
         const projectId = req.params.projectId;
-        const { name, slug, description, repositoryUrl, } = req.body;
+        const { name, slug, description, repositoryUrl, branch, } = req.body;
         if (!name || !slug) {
             return res.status(400).json({
                 message: "name and slug are required",
             });
         }
-        const service = await createService(projectId, name, slug, description, repositoryUrl);
+        const service = await createService(projectId, name, slug, description, repositoryUrl, branch);
         return res.status(201).json({
             message: "Service created successfully",
             service,

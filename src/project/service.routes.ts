@@ -46,6 +46,7 @@ router.post(
         slug,
         description,
         repositoryUrl,
+        branch,
       } = req.body;
 
       if (!name || !slug) {
@@ -59,7 +60,8 @@ router.post(
         name,
         slug,
         description,
-        repositoryUrl
+        repositoryUrl,
+        branch
       );
 
       return res.status(201).json({
@@ -83,6 +85,7 @@ router.post(
  * Get all services of a project
  * GET /projects/:projectId/services
  */
+
 router.get(
   "/projects/:projectId/services",
   requireAuth,

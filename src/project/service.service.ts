@@ -1,5 +1,4 @@
 import { eq } from "drizzle-orm";
-import { randomUUID } from "crypto";
 
 import { db } from "../lib/db.js";
 import { services } from "../db/schema.js";
@@ -9,41 +8,35 @@ export async function createService(
   name: string,
   slug: string,
   description?: string,
-  repositoryUrl?: string
+  repositoryUrl?: string,
+  branch: string = "main"
 ) {
   const [service] = await db
     .insert(services)
     .values({
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       projectId,
       name,
       slug,
-      description,
-      repositoryUrl,
+      description: description ?? null,
+      repositoryUrl: repositoryUrl ?? null,
+      branch,
     })
     .returning();
 
   return service;
 }
 
-export async function getProjectServices(
-  projectId: string
-) {
-  return await db
-    .select()
-    .from(services)
+export async function getProjectServices(projectId: string) {
+  return db.select().from(services)
     .where(eq(services.projectId, projectId));
 }
 
-export async function getServiceById(
-  serviceId: string
-) {
-  const [service] = await db
-    .select()
-    .from(services)
-    .where(eq(services.id, serviceId));
+export async function getServiceById(serviceId: string) {
+  const [service] = await db.select().from(services)
+    .where(eq(services.id, serviceId)).limit(1);
 
-  return service;
+  return service ?? null;
 }
 
 export async function updateService(
@@ -53,27 +46,21 @@ export async function updateService(
     slug?: string;
     description?: string;
     repositoryUrl?: string;
+    branch?: string;
   }
 ) {
-  const [service] = await db
-    .update(services)
-    .set({
-      ...data,
-      updatedAt: new Date(),
-    })
+  const [service] = await db.update(services)
+    .set({ ...data, updatedAt: new Date() })
     .where(eq(services.id, serviceId))
     .returning();
 
-  return service;
+  return service ?? null;
 }
 
-export async function deleteService(
-  serviceId: string
-) {
-  const [service] = await db
-    .delete(services)
+export async function deleteService(serviceId: string) {
+  const [service] = await db.delete(services)
     .where(eq(services.id, serviceId))
     .returning();
 
-  return service;
+  return service ?? null;
 }

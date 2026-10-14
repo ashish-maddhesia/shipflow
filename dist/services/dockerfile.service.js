@@ -1,4 +1,4 @@
-import { access, writeFile } from "fs/promises";
+import { access, readFile, writeFile, } from "fs/promises";
 import path from "path";
 async function exists(filePath) {
     try {
@@ -9,9 +9,14 @@ async function exists(filePath) {
         return false;
     }
 }
+async function readPackageJson(repositoryPath) {
+    const packagePath = path.join(repositoryPath, "package.json");
+    const content = await readFile(packagePath, "utf8");
+    return JSON.parse(content);
+}
 export async function generateDockerfile(repositoryPath, project) {
     const dockerfilePath = path.join(repositoryPath, "Dockerfile");
-    if (project.hasDockerfile) {
+    if (project.hasDockerfile || await exists(dockerfilePath)) {
         console.log("🐳 Dockerfile already exists");
         return dockerfilePath;
     }
@@ -19,13 +24,13 @@ export async function generateDockerfile(repositoryPath, project) {
     let dockerfile;
     switch (project.type) {
         case "node":
-            dockerfile = generateNodeDockerfile(project);
+            dockerfile = await generateNodeDockerfile(repositoryPath, project);
             break;
         case "nextjs":
             dockerfile = generateNextDockerfile(project);
             break;
         case "go":
-            dockerfile = generateGoDockerfile();
+            dockerfile = generateGoDockerfile(project);
             break;
         case "python":
             dockerfile = generatePythonDockerfile();
@@ -40,10 +45,30 @@ export async function generateDockerfile(repositoryPath, project) {
     console.log(`✅ Dockerfile generated: ${dockerfilePath}`);
     return dockerfilePath;
 }
-function generateNodeDockerfile(project) {
+async function generateNodeDockerfile(repositoryPath, project) {
+    const packageJson = await readPackageJson(repositoryPath);
+    const scripts = packageJson.scripts ?? {};
     const installCommand = getInstallCommand(project.packageManager);
-    const startCommand = getStartCommand(project.packageManager);
-    return `FROM node:22-alpine
+    let startCommand;
+    let port = 3000;
+    if (scripts.start) {
+        startCommand = '["npm", "start"]';
+    }
+    else if (scripts.server) {
+        startCommand = '["npm", "run", "server"]';
+    }
+    else if (scripts.dev) {
+        startCommand = '["npm", "run", "dev"]';
+    }
+    else {
+        throw new Error("No start script found. Expected start, server, or dev.");
+    }
+    // TodoMVC serves its application on port 8000.
+    const scriptText = Object.values(scripts).join(" ");
+    if (scriptText.includes("tests/server.js")) {
+        port = 8000;
+    }
+    let dockerfile = `FROM node:22-alpine
 
 WORKDIR /app
 
@@ -52,13 +77,26 @@ COPY package*.json ./
 RUN ${installCommand}
 
 COPY . .
-
+`;
+    if (scripts.build) {
+        dockerfile += `
 RUN npm run build
+`;
+        console.log("🔨 Build script detected: npm run build");
+    }
+    else {
+        console.log("ℹ️ No build script found, skipping build step");
+    }
+    dockerfile += `
+ENV PORT=${port}
 
-EXPOSE 3000
+EXPOSE ${port}
 
 CMD ${startCommand}
 `;
+    console.log(`🌐 Application port: ${port}`);
+    console.log(`▶️ Start command: ${startCommand}`);
+    return dockerfile;
 }
 function generateNextDockerfile(project) {
     const installCommand = getInstallCommand(project.packageManager);
@@ -79,24 +117,35 @@ EXPOSE 3000
 CMD ["npm", "start"]
 `;
 }
-function generateGoDockerfile() {
+function generateGoDockerfile(project) {
+    // Do not guess which application to deploy.
+    if (project.monorepo) {
+        throw new Error("Multiple Go applications detected. Please specify a Go application entrypoint.");
+    }
+    const entrypoint = project.entrypoint ?? ".";
+    const buildTarget = entrypoint === "."
+        ? "."
+        : `./${entrypoint}`;
+    console.log(`🎯 Go build target: ${buildTarget}`);
     return `FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
+COPY go.mod ./
+COPY go.sum* ./
 
 RUN go mod download
 
 COPY . .
 
-RUN go build -o app .
+RUN go build -o app ${buildTarget}
 
 FROM alpine:latest
 
 WORKDIR /app
 
-COPY --from=builder /app/app .
+COPY --from=builder /app/app ./
+COPY --from=builder /app/ ./
 
 EXPOSE 8080
 
@@ -136,7 +185,7 @@ FROM alpine:latest
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/app .
+COPY --from=builder /app/target/release/app ./
 
 EXPOSE 8080
 
@@ -152,20 +201,8 @@ function getInstallCommand(packageManager) {
         case "bun":
             return "bun install --frozen-lockfile";
         case "npm":
-            return "npm ci";
+            return "npm install";
         default:
             return "npm install";
-    }
-}
-function getStartCommand(packageManager) {
-    switch (packageManager) {
-        case "pnpm":
-            return '["pnpm", "start"]';
-        case "yarn":
-            return '["yarn", "start"]';
-        case "bun":
-            return '["bun", "start"]';
-        default:
-            return '["npm", "start"]';
     }
 }
